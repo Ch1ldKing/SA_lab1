@@ -4,12 +4,18 @@ import json
 import psycopg2
 from datetime import datetime
 import uuid
+import os
+from dotenv import load_dotenv
+
+load_dotenv()
+dbuser = os.getenv('POSTGRES_USER')
+dbpassword = os.getenv('POSTGRES_PASSWORD')
 
 # PostgreSQL 连接配置
 pg_conn = psycopg2.connect(
-    dbname="your_db",
-    user="your_user",
-    password="your_password",
+    dbname="postgres",
+    user=dbuser,
+    password=dbpassword,
     host="localhost",
     port="5432",
 )
