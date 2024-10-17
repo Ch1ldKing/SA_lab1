@@ -5,7 +5,9 @@ import socket
 import json
 import redis
 import os
+from dotenv import load_dotenv
 
+load_dotenv()
 # Redis 客户端配置（用于即时更新历史）
 redis_client = redis.Redis(host="localhost", port=6379, db=0)
 
@@ -29,8 +31,7 @@ def get_history():
             history.append(
                 {
                     "conversation_id": key.decode().split(":")[1],
-                    "user_query": convo.get(b"user_query", b"").decode(),
-                    "ai_response": convo.get(b"ai_response", b"").decode(),
+                    "messages": json.loads(convo.get(b"messages", b"[]").decode()),
                 }
             )
         # 按时间排序或其他逻辑
@@ -44,10 +45,11 @@ def publish_message(message, host="localhost", port=9999):
     try:
         client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         client.connect((host, port))
-        client.sendall("PUBLISHER".encode())
+        client.sendall("PUBLISHER\n".encode())
         # Send the message as JSON string
-        client.sendall(json.dumps(message).encode())
+        client.sendall((json.dumps(message)+'\n').encode())
         client.close()
+        print("Published message to Message Broker.")
     except Exception as e:
         st.error(f"Error publishing message: {e}")
 
@@ -81,11 +83,15 @@ st.sidebar.header("历史对话")
 
 history = get_history()
 for convo in history:
-    if st.sidebar.button(f"对话 {convo['user_query']}", key=convo['conversation_id'],use_container_width=True):
+    if st.sidebar.button(f"对话 {convo['conversation_id']}", key=convo['conversation_id'],use_container_width=True):
         st.session_state.conversation_id = convo['conversation_id']
         st.session_state.messages = []
         for messages in convo['messages']:
             st.session_state.messages.append(messages)
+
+if st.sidebar.button("新建对话", use_container_width=True):
+    st.session_state.conversation_id = str(uuid.uuid4())
+    st.session_state.messages = []
 
 for message in st.session_state.messages:
     if message["role"] == "user":
@@ -127,8 +133,8 @@ if prompt := st.chat_input("输入你的问题"):
 
     # 计算 token 使用量（示例，需根据实际情况调整）
     tokens_used = int(response.response_metadata['token_usage']['total_tokens'])
-    
-    #TODO 消息追加
+
+    #TODO 消息追加的时候出现重复
     # 创建消息
     conversation = {
         "conversation_id": st.session_state.conversation_id,

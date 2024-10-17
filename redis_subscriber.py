@@ -16,13 +16,10 @@ def handle_message(conversation):
     try:
         data = json.loads(conversation)
         conversation_id = data.get("conversation_id", str(uuid.uuid4()))
-        user_query = data["user_query"]
-        ai_response = data["ai_response"]
+        messages = data.get("messages", [])
 
         redis_key = f"conversation:{conversation_id}"
-        redis_client.hmset(
-            redis_key, {"user_query": user_query, "ai_response": ai_response}
-        )
+        redis_client.hset(redis_key, mapping={"messages": json.dumps(messages)})
         print(f"Stored conversation {conversation_id} to Redis.")
     except Exception as e:
         print(f"Error handling message in Redis subscriber: {e}")
@@ -31,7 +28,7 @@ def handle_message(conversation):
 def subscribe_to_broker(host="localhost", port=9999):
     client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     client.connect((host, port))
-    client.sendall("SUBSCRIBER".encode())
+    client.sendall("SUBSCRIBER\n".encode())
     print("Connected to Message Broker as Subscriber.")
 
     try:
