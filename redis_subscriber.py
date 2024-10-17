@@ -12,9 +12,9 @@ redis_client = redis.Redis(
 )
 
 
-def handle_message(message):
+def handle_message(conversation):
     try:
-        data = json.loads(message)
+        data = json.loads(conversation)
         conversation_id = data.get("conversation_id", str(uuid.uuid4()))
         user_query = data["user_query"]
         ai_response = data["ai_response"]

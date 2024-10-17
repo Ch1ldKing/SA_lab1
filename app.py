@@ -51,53 +51,100 @@ def publish_message(message, host="localhost", port=9999):
     except Exception as e:
         st.error(f"Error publishing message: {e}")
 
+def page_control(conversation_id):
+    if conversation_id:
+        # 从 Redis 获取对话
+        try:
+            redis_key = f"conversation:{conversation_id}"
+            convo = redis_client.hgetall(redis_key)
+            user_query = convo.get(b"user_query", b"").decode()
+            ai_response = convo.get(b"ai_response", b"").decode()
+            return user_query, ai_response
+        except Exception as e:
+            st.error(f"Error fetching conversation: {e}")
+            st.session_state.logs.append(f"Error fetching conversation: {e}")
+    else:
+        st.session_state.conversation_id = str(uuid.uuid4())
+        return None, None
 
 st.title("AI 问答系统")
 
+if "messages" not in st.session_state:
+    st.session_state.messages = []
+if "conversation_id" not in st.session_state:
+    st.session_state.conversation_id = str(uuid.uuid4())
+if "logs" not in st.session_state:
+    st.session_state.logs = []
+
 # 侧边栏显示历史对话
 st.sidebar.header("历史对话")
+
 history = get_history()
 for convo in history:
-    with st.sidebar.expander(f"对话 {convo['conversation_id']}"):
-        st.write(f"**用户**: {convo['user_query']}")
-        st.write(f"**AI**: {convo['ai_response']}")
+    if st.sidebar.button(f"对话 {convo['user_query']}", key=convo['conversation_id'],use_container_width=True):
+        st.session_state.conversation_id = convo['conversation_id']
+        st.session_state.messages = []
+        for messages in convo['messages']:
+            st.session_state.messages.append(messages)
 
-# 用户输入
-user_input = st.text_input("请输入您的问题：", "")
+for message in st.session_state.messages:
+    if message["role"] == "user":
+        with st.chat_message(message["role"], avatar="☺️"):
+            st.markdown(message["content"])
+    else:
+        with st.chat_message(message["role"], avatar="🤖"):
+            st.markdown(message["content"])
 
-if st.button("发送") and user_input:
-    # 生成唯一的 conversation_id
-    conversation_id = str(uuid.uuid4())
-
-    # 调用 LLM 获取响应
+if prompt := st.chat_input("输入你的问题"):
+    with st.chat_message("user", avatar="☺️"):
+        st.markdown(prompt)
+    st.session_state.messages.append({"role": "user", "content": prompt})
     try:
-        response = llm.invoke(user_input)
+        response = llm.invoke(prompt)
     except Exception as e:
         st.error(f"AI 生成响应失败: {e}")
-        response = "抱歉，我无法生成响应。"
-    content = response.content
-    # 显示 AI 响应
-    st.write("**AI**:", content)
+        
+    with st.chat_message('assistant', avatar='🤖'):
+        st.markdown(response.content)
+    st.session_state.messages.append({'role': 'assistant', 'content': response.content})
+
+# # 用户输入
+# user_input = st.text_input(f"{st.session_state.conversation_id}", "")
+
+# if st.button("发送") and user_input:
+#     # 生成唯一的 conversation_id
+#     conversation_id = str(uuid.uuid4())
+
+#     # 调用 LLM 获取响应
+#     try:
+#         response = llm.invoke(user_input)
+#     except Exception as e:
+#         st.error(f"AI 生成响应失败: {e}")
+#         response = "抱歉，我无法生成响应。"
+#     content = response.content
+#     # 显示 AI 响应
+#     st.write("**AI**:", content)
 
     # 计算 token 使用量（示例，需根据实际情况调整）
     tokens_used = int(response.response_metadata['token_usage']['total_tokens'])
-
+    
+    #TODO 消息追加
     # 创建消息
-    message = {
-        "conversation_id": conversation_id,
-        "user_query": user_input,
-        "ai_response": content,
+    conversation = {
+        "conversation_id": st.session_state.conversation_id,
+        "messages": st.session_state.messages,
         "tokens_used": tokens_used,
+        "logs":st.session_state.logs
     }
 
     # 发布消息到中间件
-    publish_message(message)
+    publish_message(conversation)
 
-    # 更新 Redis 立即显示
-    try:
-        redis_key = f"conversation:{conversation_id}"
-        redis_client.hmset(
-            redis_key, {"user_query": user_input, "ai_response": content}
-        )
-    except Exception as e:
-        st.error(f"Error updating history: {e}")
+    # # 更新 Redis 立即显示
+    # try:
+    #     redis_key = f"conversation:{conversation_id}"
+    #     redis_client.hmset(
+    #         redis_key, {"user_query": user_input, "ai_response": content}
+    #     )
+    # except Exception as e:
+    #     st.error(f"Error updating history: {e}")
