@@ -43,7 +43,7 @@ def handle_message(message):
 def subscribe_to_broker(host="localhost", port=9999):
     client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     client.connect((host, port))
-    client.sendall("SUBSCRIBER".encode())
+    client.sendall("SUBSCRIBER\n".encode())
     print("Connected to Message Broker as Subscriber.")
 
     try:
