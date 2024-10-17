@@ -1,25 +1,26 @@
 import streamlit as st
-from langchain_community.chat_models import ChatZhipuAI
+from langchain_core.messages import AIMessage, HumanMessage, BaseMessage
 import uuid
 import socket
 import json
 import redis
 import os
 from dotenv import load_dotenv
-
+from chain import build_app, generate
 load_dotenv()
+
 # Redis 客户端配置（用于即时更新历史）
 redis_client = redis.Redis(host="localhost", port=6379, db=0)
 
-# LangChain LLM 初始化
-ZHIPU_API_KEY = os.getenv('ZHIPU_API_KEY')
+# # LangChain LLM 初始化
+# ZHIPU_API_KEY = os.getenv('ZHIPU_API_KEY')
 
-# LangChain LLM 初始化
-llm = ChatZhipuAI(
-    api_key=ZHIPU_API_KEY,
-    temperature=0.5,
-    model="glm-4-flash",
-)
+# # LangChain LLM 初始化
+# llm = ChatZhipuAI(
+#     api_key=ZHIPU_API_KEY,
+#     temperature=0.5,
+#     model="glm-4-flash",
+# )
 
 
 def get_history():
@@ -77,29 +78,37 @@ if st.sidebar.button("新建对话", use_container_width=True):
     st.session_state.conversation_id = str(uuid.uuid4())
     st.session_state.messages = []
 
+messages_history=[]
+
 for message in st.session_state.messages:
     if message["role"] == "user":
         with st.chat_message(message["role"], avatar="☺️"):
             st.markdown(message["content"])
+            messages_history.append(HumanMessage(message["content"]))
+
     else:
         with st.chat_message(message["role"], avatar="🤖"):
             st.markdown(message["content"])
+            messages_history.append(AIMessage(message["content"]))
 
 if prompt := st.chat_input("输入你的问题"):
     with st.chat_message("user", avatar="☺️"):
         st.markdown(prompt)
     st.session_state.messages.append({"role": "user", "content": prompt})
+
     try:
-        response = llm.invoke(prompt)
+        app = build_app()
+        response = generate(app, st.session_state.conversation_id, messages_history, prompt)
+
     except Exception as e:
         st.error(f"AI 生成响应失败: {e}")
 
     with st.chat_message('assistant', avatar='🤖'):
-        st.markdown(response.content)
-    st.session_state.messages.append({'role': 'assistant', 'content': response.content})
+        st.markdown(response['answer'])
+    st.session_state.messages.append({'role': 'assistant', 'content': response['answer']})
 
     # 计算 token 使用量（示例，需根据实际情况调整）
-    tokens_used = int(response.response_metadata['token_usage']['total_tokens'])
+    tokens_used = int(response['metadata']['token_usage']['total_tokens'])
 
     # 创建消息
     conversation = {
@@ -113,4 +122,3 @@ if prompt := st.chat_input("输入你的问题"):
     publish_message(conversation)
 
     st.rerun()
-
