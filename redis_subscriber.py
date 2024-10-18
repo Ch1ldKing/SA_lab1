@@ -12,22 +12,20 @@ redis_client = redis.Redis(host="localhost", port=6379, db=0)
 # 创建线程池（最大线程数可根据需求调整）
 thread_pool = ThreadPoolExecutor(max_workers=10)
 
-def handle_message(platform, message):
+def handle_message(platform, message): 
     """处理接收到的消息并存储到 Redis。"""
     try:
         conversation_id = message.get("conversation_id", str(uuid.uuid4()))
         messages = message.get("messages", [])
         title = message.get("title", "")
         redis_key = f"conversation:{conversation_id}"
-        redis_client.hset(redis_key, mapping={"messages": json.dumps(messages), "title": title})
+        timestamp = int(time.time())
+        redis_client.hset(redis_key, mapping={"messages": json.dumps(messages), "title": title, "timestamp": timestamp})
+        redis_client.zadd("conversations_by_timestamp", {redis_key: timestamp})
         print(f"Stored conversation {conversation_id} under platform {platform} in Redis.")
-
-        redis_key = f"{conversation_id}:"
-        redis_client.hset(redis_key, mapping={"messages": json.dumps(messages)})
-        # print(f"Stored conversation {conversation_id} under platform {platform} in Redis.")
     except Exception as e:
         print(f"Error handling message in Redis subscriber: {e}")
-
+        
 def fetch_messages_from_broker(user):
     """从 Broker 拉取消息并提交到线程池处理。"""
     url = f"http://localhost:9999/fetch"

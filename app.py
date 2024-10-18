@@ -15,9 +15,9 @@ load_dotenv()
 redis_client = redis.Redis(host="localhost", port=6379, db=0)
 
 def get_history():
-    """获取 Redis 中存储的对话历史。"""
+    """获取 Redis 中存储的对话历史，并按 timestamp 降序排序。"""
     try:
-        keys = redis_client.keys("conversation:*")
+        keys = redis_client.zrevrange("conversations_by_timestamp", 0, -1)
         history = []
         for key in keys:
             convo = redis_client.hgetall(key)
@@ -25,7 +25,8 @@ def get_history():
                 {
                     "conversation_id": key.decode().split(":")[1],
                     "messages": json.loads(convo.get(b"messages", b"[]").decode()),
-                    "title": convo.get(b"title", b"").decode()
+                    "title": convo.get(b"title", b"").decode(),
+                    "timestamp": int(convo.get(b"timestamp", b"0").decode())
                 }
             )
         return history
@@ -105,7 +106,6 @@ if prompt := st.chat_input("输入你的问题"):
         st.markdown(response['answer'])
     st.session_state.messages.append({'role': 'assistant', 'content': response['answer']})
 
-    # 计算 token 使用量（示例，需根据实际情况调整）
     tokens_used = int(response['metadata']['token_usage']['total_tokens'])
 
     if st.session_state.title == "":

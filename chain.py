@@ -37,7 +37,6 @@ def build_app():
     chain = prompt | llm
 
     def call_model(state: State):
-        # print("state", state)
         response = chain.invoke(state)
         return {
             "chat_history": [
@@ -66,10 +65,11 @@ def generate(app, conversation_id, messages_history, input):
 def generate_title(chat_history):
     title_prompt = ChatPromptTemplate.from_messages(
         [
-            ("system", "把以下对话总结为一个简短标题"),
+            ("system", "把以下对话总结为一个简短标题，禁止带有任何符号"),
             ("human", "{input}"),
         ]
     )
     chain = title_prompt | llm 
     response = chain.invoke({"input": chat_history})
+    print(response.content)
     return response.content
