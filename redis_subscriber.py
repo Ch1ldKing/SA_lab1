@@ -17,9 +17,9 @@ def handle_message(platform, message):
     try:
         conversation_id = message.get("conversation_id", str(uuid.uuid4()))
         messages = message.get("messages", [])
-
-        redis_key = f"{conversation_id}:"
-        redis_client.hset(redis_key, mapping={"messages": json.dumps(messages)})
+        title = message.get("title", "")
+        redis_key = f"conversation:{conversation_id}"
+        redis_client.hset(redis_key, mapping={"messages": json.dumps(messages), "title": title})
         print(f"Stored conversation {conversation_id} under platform {platform} in Redis.")
     except Exception as e:
         print(f"Error handling message in Redis subscriber: {e}")
