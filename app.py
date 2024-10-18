@@ -39,7 +39,7 @@ def publish_message(platform, message):
         "message": message
     }
 
-    print(payload)
+    # print(payload)
     try:
         response = requests.post(url, json=payload)
         if response.status_code == 200:

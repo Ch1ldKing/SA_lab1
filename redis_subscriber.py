@@ -20,15 +20,15 @@ def handle_message(platform, message):
 
         redis_key = f"{conversation_id}:"
         redis_client.hset(redis_key, mapping={"messages": json.dumps(messages)})
-        print(f"Stored conversation {conversation_id} under platform {platform} in Redis.")
+        # print(f"Stored conversation {conversation_id} under platform {platform} in Redis.")
     except Exception as e:
         print(f"Error handling message in Redis subscriber: {e}")
 
 def fetch_messages_from_broker(user):
     """从 Broker 拉取消息并提交到线程池处理。"""
-    url = f"http://localhost:9999/fetch?user={user}"
+    url = f"http://localhost:9999/fetch"
     try:
-        response = requests.post(url)
+        response = requests.post(url, json={"user": user})
         if response.status_code == 200:
             data = response.json()
             for platform, messages in data.items():
@@ -53,7 +53,7 @@ def subscribe_user_to_platform(user, platform):
     except Exception as e:
         print(f"Error subscribing user: {e}")
 
-def scheduled_fetch(user, interval=2):
+def scheduled_fetch(user, interval=0.1):
     """定期从 Broker 拉取消息的线程任务。"""
     while True:
         fetch_messages_from_broker(user)
