@@ -2,8 +2,10 @@ from flask import Flask, request, jsonify
 from threading import Lock
 from collections import defaultdict, deque
 from concurrent.futures import ThreadPoolExecutor
+from flask_socketio import SocketIO, emit
 
 app = Flask(__name__)
+socketio = SocketIO(app, cors_allowed_origins="*")  # 支持 WebSocket 连接
 
 # 使用字典存储每个用户的订阅平台及其消息列表
 user_messages = defaultdict(lambda: defaultdict(deque))  # {user_name: {platform_name: deque([message_list])}}
@@ -19,6 +21,8 @@ def add_message_to_users(platform_name, message):
         for user, platforms in subscribe_map.items():
             if platform_name in platforms:
                 user_messages[user][platform_name].append(message)
+                socketio.emit(platform_name, message)
+        return {"status": "Message published"}, 200
         return {"status": "Message published"}, 200
 
 def add_subscription(user_name, platform_name):
