@@ -4,9 +4,10 @@ import uuid
 import json
 import redis
 import os
+import time
 import requests  # 使用 requests 代替 socket
 from dotenv import load_dotenv
-from chain import build_app, generate
+from chain import build_app, generate, generate_title
 
 load_dotenv()
 
@@ -24,6 +25,7 @@ def get_history():
                 {
                     "conversation_id": key.decode().split(":")[1],
                     "messages": json.loads(convo.get(b"messages", b"[]").decode()),
+                    "title": convo.get(b"title", b"").decode()
                 }
             )
         return history
@@ -58,19 +60,22 @@ if "conversation_id" not in st.session_state:
     st.session_state.conversation_id = str(uuid.uuid4())
 if "logs" not in st.session_state:
     st.session_state.logs = []
-
+if "title" not in st.session_state:
+    st.session_state.title = ""
 # 侧边栏显示历史对话
 st.sidebar.header("历史对话")
 
 history = get_history()
 for convo in history:
-    if st.sidebar.button(f"对话 {convo['conversation_id']}", key=convo['conversation_id'], use_container_width=True):
+    if st.sidebar.button(f"{convo['title']}", key=convo['conversation_id'], use_container_width=True):
         st.session_state.conversation_id = convo['conversation_id']
         st.session_state.messages = convo['messages']
+        st.session_state.title = convo['title']
 
 if st.sidebar.button("新建对话", use_container_width=True):
     st.session_state.conversation_id = str(uuid.uuid4())
     st.session_state.messages = []
+    st.session_state.title = ""
 
 messages_history = []
 
@@ -93,6 +98,7 @@ if prompt := st.chat_input("输入你的问题"):
         app = build_app()
         response = generate(app, st.session_state.conversation_id, messages_history, prompt)
 
+
     except Exception as e:
         st.error(f"AI 生成响应失败: {e}")
 
@@ -103,15 +109,21 @@ if prompt := st.chat_input("输入你的问题"):
     # 计算 token 使用量（示例，需根据实际情况调整）
     tokens_used = int(response['metadata']['token_usage']['total_tokens'])
 
+    if st.session_state.title == "":
+        st.session_state.title = generate_title(st.session_state.messages)
+
     # 创建消息
     conversation = {
         "conversation_id": st.session_state.conversation_id,
         "messages": st.session_state.messages,
         "tokens_used": tokens_used,
-        "logs": st.session_state.logs
+        "logs": st.session_state.logs,
+        "title": st.session_state.title
     }
 
     # 发布消息到中间件
     publish_message(platform="log", message=conversation)
-
+    
+    # 延迟五秒
+    time.sleep(5)
     st.rerun()
