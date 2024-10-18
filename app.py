@@ -41,7 +41,6 @@ def publish_message(platform, message):
         "message": message
     }
 
-    print(payload)
     try:
         response = requests.post(url, json=payload)
         if response.status_code == 200:
@@ -52,7 +51,7 @@ def publish_message(platform, message):
         st.error(f"Error publishing message: {e}")
 
 # 初始化 Streamlit 界面
-st.title("AI 问答系统")
+st.title("🤡软件架构小助手")
 
 if "messages" not in st.session_state:
     st.session_state.messages = []
@@ -72,7 +71,7 @@ for convo in history:
         st.session_state.messages = convo['messages']
         st.session_state.title = convo['title']
 
-if st.sidebar.button("新建对话", use_container_width=True):
+if st.sidebar.button("✨新建对话", use_container_width=True):
     st.session_state.conversation_id = str(uuid.uuid4())
     st.session_state.messages = []
     st.session_state.title = ""
