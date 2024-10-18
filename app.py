@@ -7,7 +7,7 @@ import os
 import time
 import requests  # 使用 requests 代替 socket
 from dotenv import load_dotenv
-from chain import build_app, generate, generate_title
+from chain import build_app, generate, generate_title, num_tokens_from_string
 
 load_dotenv()
 
@@ -96,17 +96,20 @@ if prompt := st.chat_input("输入你的问题"):
 
     try:
         app = build_app()
-        response = generate(app, st.session_state.conversation_id, messages_history, prompt)
-
+        # response = generate(app, st.session_state.conversation_id, messages_history, prompt)
 
     except Exception as e:
         st.error(f"AI 生成响应失败: {e}")
 
     with st.chat_message('assistant', avatar='🤖'):
-        st.markdown(response['answer'])
-    st.session_state.messages.append({'role': 'assistant', 'content': response['answer']})
+        # st.markdown(response['answer'])
+        response = st.write_stream(
+            generate(app, st.session_state.conversation_id, messages_history, prompt)
+        )
+    
+    st.session_state.messages.append({'role': 'assistant', 'content': response})
 
-    tokens_used = int(response['metadata']['token_usage']['total_tokens'])
+    tokens_used = num_tokens_from_string(response)
 
     if st.session_state.title == "":
         st.session_state.title = generate_title(st.session_state.messages)
@@ -122,7 +125,7 @@ if prompt := st.chat_input("输入你的问题"):
 
     # 发布消息到中间件
     publish_message(platform="log", message=conversation)
-    
+
     # 延迟五秒
-    time.sleep(5)
+    time.sleep(3)
     st.rerun()
