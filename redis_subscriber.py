@@ -10,7 +10,7 @@ import time
 redis_client = redis.Redis(host="localhost", port=6379, db=0)
 
 # 创建线程池（最大线程数可根据需求调整）
-thread_pool = ThreadPoolExecutor(max_workers=1)
+thread_pool = ThreadPoolExecutor(max_workers=10)
 
 def handle_message(platform, message):
     """处理接收到的消息并存储到 Redis。"""
@@ -53,7 +53,7 @@ def subscribe_user_to_platform(user, platform):
     except Exception as e:
         print(f"Error subscribing user: {e}")
 
-def scheduled_fetch(user, interval=10):
+def scheduled_fetch(user, interval=2):
     """定期从 Broker 拉取消息的线程任务。"""
     while True:
         fetch_messages_from_broker(user)
