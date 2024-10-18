@@ -1,93 +1,75 @@
-import socket
-import selectors
-import threading
-from queue import Queue
+from flask import Flask, request, jsonify
+from threading import Lock
+from collections import defaultdict, deque
+from concurrent.futures import ThreadPoolExecutor
 
-class MessageBroker:
-    def __init__(self, host="localhost", port=9999):
-        self.host = host
-        self.port = port
-        self.sel = selectors.DefaultSelector()  # 使用 I/O 多路复用
-        self.subscribers = {}  # 存储订阅者及其消息队列
-        self.lock = threading.Lock()  # 保护共享资源
+app = Flask(__name__)
 
-        self.server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.server.bind((self.host, self.port))
-        self.server.listen(100)  # 增加监听队列大小
-        self.server.setblocking(False)  # 非阻塞模式
-        self.sel.register(self.server, selectors.EVENT_READ, self.accept)
-        print(f"Message Broker running on {self.host}:{self.port}")
+# 使用字典存储每个用户的订阅平台及其消息列表
+user_messages = defaultdict(lambda: defaultdict(deque))  # {user_name: {platform_name: deque([message_list])}}
+subscribe_map = defaultdict(list)  # {user_name: [platform_list]}
+lock = Lock()  # 保护共享资源的锁
 
-    def accept(self, server_sock):
-        client_socket, addr = server_sock.accept()
-        print(f"Connection from {addr}")
-        client_socket.setblocking(False)
-        self.sel.register(client_socket, selectors.EVENT_READ, self.handle_client)
+# 创建线程池用于并发处理（最大线程数根据需要调整）
+executor = ThreadPoolExecutor(max_workers=10)
 
-    def handle_client(self, client_socket):
-        try:
-            data = client_socket.recv(1024).decode()
-            if not data:
-                self._close_connection(client_socket)
-                return
+def add_message_to_users(platform_name, message):
+    """将消息添加到每个订阅了该平台的用户的消息队列。"""
+    with lock:
+        for user, platforms in subscribe_map.items():
+            if platform_name in platforms:
+                user_messages[user][platform_name].append(message)
+        return {"status": "Message published"}, 200
 
-            role, message = data.split("\n", 1)
-            role = role.strip()
+def add_subscription(user_name, platform_name):
+    """为用户添加订阅的平台。"""
+    with lock:
+        if platform_name not in subscribe_map[user_name]:
+            subscribe_map[user_name].append(platform_name)
+            return {"status": f"User {user_name} subscribed to {platform_name}"}, 200
+        else:
+            return {"status": "Already subscribed"}, 409
 
-            if role == "PUBLISHER":
-                print(f"Received message from publisher: {message}")
-                self.broadcast(message)
-            elif role == "SUBSCRIBER":
-                with self.lock:
-                    self.subscribers[client_socket] = Queue()  # 每个订阅者一个队列
-                print(f"新增订阅者，总订阅者数量: {len(self.subscribers)}")
-            else:
-                print("未知角色，关闭连接")
-                self._close_connection(client_socket)
-        except Exception as e:
-            print(f"处理客户端时出错: {e}")
-            self._close_connection(client_socket)
+@app.route('/publish', methods=['POST'])
+def handle_publish():
+    """发布消息到某个平台，并将其分发给订阅该平台的用户。"""
+    data = request.get_json()
+    platform_name = data['platform']
+    message = data['message']
 
-    def broadcast(self, message):
-        """将消息发送给所有订阅者"""
-        with self.lock:
-            for subscriber, queue in self.subscribers.items():
-                queue.put(message)  # 将消息放入队列
-                threading.Thread(target=self.send_message, args=(subscriber,), daemon=True).start()
+    # 使用线程池异步执行发布操作
+    future = executor.submit(add_message_to_users, platform_name, message)
+    result, status = future.result()
+    return jsonify(result), status
 
-    def send_message(self, subscriber):
-        """异步发送消息"""
-        try:
-            with self.lock:
-                if subscriber in self.subscribers:
-                    message = self.subscribers[subscriber].get_nowait()
-                    subscriber.sendall(message.encode())
-                    print(f"Sent message to subscriber: {message}")
-        except Exception as e:
-            print(f"Error sending message: {e}")
-            self._close_connection(subscriber)
+@app.route('/subscribe', methods=['POST'])
+def handle_subscribe():
+    """订阅用户到某个平台的主题。"""
+    data = request.get_json()
+    user_name = data['user']
+    platform_name = data['platform']
 
-    def _close_connection(self, client_socket):
-        """关闭客户端连接"""
-        with self.lock:
-            if client_socket in self.subscribers:
-                del self.subscribers[client_socket]
-                print(f"订阅者断开连接，总订阅者数量: {len(self.subscribers)}")
-        self.sel.unregister(client_socket)
-        client_socket.close()
+    # 使用线程池异步执行订阅操作
+    future = executor.submit(add_subscription, user_name, platform_name)
+    result, status = future.result()
+    return jsonify(result), status
 
-    def start(self):
-        try:
-            while True:
-                events = self.sel.select(timeout=None)  # 等待 I/O 事件
-                for key, _ in events:
-                    callback = key.data
-                    callback(key.fileobj)
-        except KeyboardInterrupt:
-            print("Shutting down broker.")
-        finally:
-            self.server.close()
+@app.route('/fetch', methods=['GET'])
+def fetch_messages():
+    """根据用户的订阅，获取尚未处理的消息并返回给用户。"""
+    user_name = request.args.get('user')
 
-if __name__ == "__main__":
-    broker = MessageBroker(host="localhost", port=9999)
-    broker.start()
+    with lock:
+        if user_name not in subscribe_map:
+            return jsonify({"status": "User not found"}), 404
+
+        user_data = {}
+        for platform in subscribe_map[user_name]:
+            messages = list(user_messages[user_name][platform])
+            user_data[platform] = messages
+            user_messages[user_name][platform].clear()  # 清空已拉取的消息
+
+        return jsonify(user_data), 200
+
+if __name__ == '__main__':
+    app.run(host='0.0.0.0', port=9999, threaded=True)  # 开启多线程支持

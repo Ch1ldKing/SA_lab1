@@ -1,4 +1,4 @@
-import socket
+import requests
 import threading
 import json
 from psycopg2 import pool
@@ -6,8 +6,7 @@ from datetime import datetime
 import uuid
 import os
 from dotenv import load_dotenv
-
-count:int = 1
+import time
 
 # 加载环境变量
 load_dotenv()
@@ -16,7 +15,7 @@ dbpassword = os.getenv('POSTGRES_PASSWORD')
 
 # 初始化 PostgreSQL 连接池
 connection_pool = pool.SimpleConnectionPool(
-    1, 2000,  # 最小连接数 1，最大连接数 20
+    1, 20,  # 最小连接数 1，最大连接数 20
     dbname="postgres",
     user=dbuser,
     password=dbpassword,
@@ -24,56 +23,85 @@ connection_pool = pool.SimpleConnectionPool(
     port="5432",
 )
 
-def handle_message(message):
+def handle_message(platform, message):
+    """处理单条消息并存储到 PostgreSQL。"""
     conn = None
     cursor = None
-    global count
     try:
         # 从连接池获取连接
         conn = connection_pool.getconn()
         cursor = conn.cursor()
 
-        # 处理消息并插入到数据库
-        data = json.loads(message)
-        conversation_id = data.get("conversation_id", str(uuid.uuid4()))
-        tokens_used = data.get("tokens_used", 0)
+        # 解析消息并插入数据库
+        conversation_id = message.get("conversation_id", str(uuid.uuid4()))
+        tokens_used = message.get("tokens_used", 0)
         timestamp = datetime.now()
 
         cursor.execute(
-            "INSERT INTO conversation_logs (conversation_id, tokens_used, timestamp) VALUES (%s, %s, %s)",
-            (conversation_id, tokens_used, timestamp),
+            "INSERT INTO conversation_logs (platform, conversation_id, tokens_used, timestamp) VALUES (%s, %s, %s, %s)",
+            (platform, conversation_id, tokens_used, timestamp),
         )
         conn.commit()
-        # print(f"{count}Logged conversation {conversation_id} to PostgreSQL.")
-        count = count + 1
+        print(f"Logged conversation {conversation_id} from platform {platform} to PostgreSQL.")
     except Exception as e:
         print(f"Error handling message in PostgreSQL subscriber: {e}")
     finally:
-        # 确保游标和连接被正确关闭和释放回池中
+        # 释放游标和连接
         if cursor:
             cursor.close()
         if conn:
             connection_pool.putconn(conn)
 
-def subscribe_to_broker(host="localhost", port=9999):
-    client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    client.connect((host, port))
-    client.sendall("SUBSCRIBER\n".encode())
-    print("Connected to Message Broker as Subscriber.")
-
+def subscribe_user_to_platform(user, platform):
+    """订阅用户到指定平台。"""
+    url = "http://localhost:9999/subscribe"
+    payload = {"user": user, "platform": platform}
     try:
-        while True:
-            data = client.recv(4096).decode()
-            if not data:
-                break
-            handle_message(data)
-    except KeyboardInterrupt:
-        print("PostgreSQL subscriber shutting down.")
+        response = requests.post(url, json=payload)
+        if response.status_code == 200:
+            print(f"User {user} subscribed to {platform}.")
+        else:
+            print(f"Subscription failed: {response.json()}")
     except Exception as e:
-        print(f"Error in PostgreSQL subscriber: {e}")
-    finally:
-        client.close()
-        connection_pool.closeall()  # 关闭连接池
+        print(f"Error subscribing user: {e}")
+
+def fetch_messages_from_broker(user):
+    """从 Broker 拉取消息并处理。"""
+    url = f"http://localhost:9999/fetch?user={user}"
+    try:
+        response = requests.get(url)
+        if response.status_code == 200:
+            data = response.json()
+            for platform, messages in data.items():
+                print(f"Processing messages from platform: {platform}")
+                for message in messages:
+                    handle_message(platform, message)
+        else:
+            print(f"Failed to fetch messages: {response.status_code}")
+    except Exception as e:
+        print(f"Error fetching messages: {e}")
+
+def scheduled_fetch(user, interval=10):
+    """定期拉取消息的线程任务。"""
+    while True:
+        fetch_messages_from_broker(user)
+        time.sleep(interval)  # 等待指定时间后再次拉取
 
 if __name__ == "__main__":
-    subscribe_to_broker()
+    user_name = "postgresql"  # 示例用户
+    platform_name = "log"  # 示例平台
+
+    # 用户订阅平台
+    subscribe_user_to_platform(user_name, platform_name)
+
+    # 启动一个线程，定期从 Broker 拉取消息
+    fetch_thread = threading.Thread(target=scheduled_fetch, args=(user_name,), daemon=True)
+    fetch_thread.start()
+
+    # 主线程保持运行，等待用户中断
+    try:
+        while True:
+            time.sleep(1)  # 主线程休眠，保持应用运行
+    except KeyboardInterrupt:
+        print("PostgreSQL subscriber shutting down.")
+        connection_pool.closeall()  # 关闭连接池
