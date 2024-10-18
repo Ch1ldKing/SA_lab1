@@ -69,7 +69,7 @@ def fetch_messages_from_broker(user):
     """从 Broker 拉取消息并处理。"""
     url = f"http://localhost:9999/fetch?user={user}"
     try:
-        response = requests.get(url)
+        response = requests.post(url)
         if response.status_code == 200:
             data = response.json()
             for platform, messages in data.items():
@@ -81,7 +81,7 @@ def fetch_messages_from_broker(user):
     except Exception as e:
         print(f"Error fetching messages: {e}")
 
-def scheduled_fetch(user, interval=10):
+def scheduled_fetch(user, interval=2):
     """定期拉取消息的线程任务。"""
     while True:
         fetch_messages_from_broker(user)

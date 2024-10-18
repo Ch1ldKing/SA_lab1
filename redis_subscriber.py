@@ -28,7 +28,7 @@ def fetch_messages_from_broker(user):
     """从 Broker 拉取消息并提交到线程池处理。"""
     url = f"http://localhost:9999/fetch?user={user}"
     try:
-        response = requests.get(url)
+        response = requests.post(url)
         if response.status_code == 200:
             data = response.json()
             for platform, messages in data.items():

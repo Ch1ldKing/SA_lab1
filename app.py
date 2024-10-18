@@ -38,6 +38,8 @@ def publish_message(platform, message):
         "platform": platform,
         "message": message
     }
+
+    print(payload)
     try:
         response = requests.post(url, json=payload)
         if response.status_code == 200:

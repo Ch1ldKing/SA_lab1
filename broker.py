@@ -58,7 +58,7 @@ def handle_subscribe():
     result, status = future.result()
     return jsonify(result), status
 
-@app.route('/fetch', methods=['GET'])
+@app.route('/fetch', methods=['POST'])
 def fetch_messages():
     """根据用户的订阅，获取尚未处理的消息并返回给用户。"""
     user_name = request.args.get('user')
