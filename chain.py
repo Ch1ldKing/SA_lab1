@@ -5,7 +5,6 @@ from langchain_core.messages import AIMessage, HumanMessage, BaseMessage
 from langchain_community.chat_models import ChatZhipuAI
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 import os
-from langchain_core.output_parsers.string import StrOutputParser
 from typing import Sequence
 from typing_extensions import Annotated, TypedDict
 from langgraph.graph.message import add_messages
@@ -58,23 +57,19 @@ def build_app():
 
 def generate(app, conversation_id, messages_history, input):
     config = {"configurable": {"thread_id": conversation_id}}
-    # print(config)
     response = app.invoke(
         {"input": input, "chat_history": messages_history},
         config=config
     )
-    # print("response", response)
     return response
 
 def generate_title(chat_history):
-    parser = StrOutputParser()
     title_prompt = ChatPromptTemplate.from_messages(
         [
             ("system", "把以下对话总结为一个简短标题"),
             ("human", "{input}"),
         ]
     )
-    chain = title_prompt | llm | parser
+    chain = title_prompt | llm 
     response = chain.invoke({"input": chat_history})
-    print(response)
-    return response
+    return response.content
