@@ -1,8 +1,9 @@
 from flask import Flask, request, jsonify
 from threading import Lock
 from collections import defaultdict, deque
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, wait, FIRST_COMPLETED
 from flask_socketio import SocketIO, emit
+import queue
 
 app = Flask(__name__)
 socketio = SocketIO(app, cors_allowed_origins="*")  # 支持 WebSocket 连接
@@ -12,8 +13,9 @@ user_messages = defaultdict(lambda: defaultdict(deque))  # {user_name: {platform
 subscribe_map = defaultdict(list)  # {user_name: [platform_list]}
 lock = Lock()  # 保护共享资源的锁
 
-# 创建线程池用于并发处理（最大线程数根据需要调整）
-executor = ThreadPoolExecutor(max_workers=10)
+# 创建两个线程池：一个用于 fetch 请求（优先级高），一个用于其他请求
+fetch_executor = ThreadPoolExecutor(max_workers=5)  # 高优先级线程池
+general_executor = ThreadPoolExecutor(max_workers=20)  # 普通优先级线程池
 
 def add_message_to_users(platform_name, message):
     """将消息添加到每个订阅了该平台的用户的消息队列。"""
@@ -40,8 +42,8 @@ def handle_publish():
     platform_name = data['platform']
     message = data['message']
 
-    # 使用线程池异步执行发布操作
-    future = executor.submit(add_message_to_users, platform_name, message)
+    # 使用普通线程池异步执行发布操作
+    future = general_executor.submit(add_message_to_users, platform_name, message)
     result, status = future.result()
     return jsonify(result), status
 
@@ -52,19 +54,26 @@ def handle_subscribe():
     user_name = data['user']
     platform_name = data['platform']
 
-    # 使用线程池异步执行订阅操作
-    future = executor.submit(add_subscription, user_name, platform_name)
+    # 使用普通线程池异步执行订阅操作
+    future = general_executor.submit(add_subscription, user_name, platform_name)
     result, status = future.result()
     return jsonify(result), status
 
 @app.route('/fetch', methods=['POST'])
 def fetch_messages():
     """根据用户的订阅，获取尚未处理的消息并返回给用户。"""
-    user_name = request.args.get('user')
+    user_name = request.json.get('user')
 
+    # 使用高优先级线程池处理 fetch 请求
+    future = fetch_executor.submit(process_fetch, user_name)
+    result, status = future.result()
+    return jsonify(result), status
+
+def process_fetch(user_name):
+    """处理 fetch 请求的具体逻辑。"""
     with lock:
         if user_name not in subscribe_map:
-            return jsonify({"status": "User not found"}), 404
+            return {"status": "User not found"}, 404
 
         user_data = {}
         for platform in subscribe_map[user_name]:
@@ -72,7 +81,7 @@ def fetch_messages():
             user_data[platform] = messages
             user_messages[user_name][platform].clear()  # 清空已拉取的消息
 
-        return jsonify(user_data), 200
+        return user_data, 200
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=9999, threaded=True)  # 开启多线程支持

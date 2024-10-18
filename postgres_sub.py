@@ -15,7 +15,7 @@ dbpassword = os.getenv('POSTGRES_PASSWORD')
 
 # 初始化 PostgreSQL 连接池
 connection_pool = pool.SimpleConnectionPool(
-    1, 20,  # 最小连接数 1，最大连接数 20
+    1, 200,  # 最小连接数 1，最大连接数 20
     dbname="postgres",
     user=dbuser,
     password=dbpassword,
@@ -42,7 +42,7 @@ def handle_message(platform, message):
             (platform, conversation_id, tokens_used, timestamp),
         )
         conn.commit()
-        print(f"Logged conversation {conversation_id} from platform {platform} to PostgreSQL.")
+        # print(f"Logged conversation {conversation_id} from platform {platform} to PostgreSQL.")
     except Exception as e:
         print(f"Error handling message in PostgreSQL subscriber: {e}")
     finally:
@@ -67,9 +67,9 @@ def subscribe_user_to_platform(user, platform):
 
 def fetch_messages_from_broker(user):
     """从 Broker 拉取消息并处理。"""
-    url = f"http://localhost:9999/fetch?user={user}"
+    url = f"http://localhost:9999/fetch"
     try:
-        response = requests.post(url)
+        response = requests.post(url, json={"user": user})
         if response.status_code == 200:
             data = response.json()
             for platform, messages in data.items():
@@ -81,7 +81,7 @@ def fetch_messages_from_broker(user):
     except Exception as e:
         print(f"Error fetching messages: {e}")
 
-def scheduled_fetch(user, interval=2):
+def scheduled_fetch(user, interval=0.1):
     """定期拉取消息的线程任务。"""
     while True:
         fetch_messages_from_broker(user)
