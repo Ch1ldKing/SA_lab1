@@ -23,7 +23,6 @@ def add_message_to_users(platform_name, message):
                 user_messages[user][platform_name].append(message)
                 socketio.emit(platform_name, message)
         return {"status": "Message published"}, 200
-        return {"status": "Message published"}, 200
 
 def add_subscription(user_name, platform_name):
     """为用户添加订阅的平台。"""
