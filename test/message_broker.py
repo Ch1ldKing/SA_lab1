@@ -69,6 +69,7 @@ class MessageBroker:
             message = buffer
             if not message:
                 print("Publisher connection closed.")
+            print(f"Received message: {message}")
             self.broadcast(message)
         except Exception as e:
             print(f"Error handling publisher: {e}")

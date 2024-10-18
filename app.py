@@ -46,9 +46,9 @@ def publish_message(message, host="localhost", port=9999):
     try:
         client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         client.connect((host, port))
-        client.sendall("PUBLISHER\n".encode())
         # Send the message as JSON string
-        client.sendall((json.dumps(message)+'\n').encode())
+        print(("PUBLISHER\n"+ json.dumps(message)+'\n'))
+        client.sendall(("PUBLISHER\n"+ json.dumps(message)+'\n').encode())
         client.close()
         print("Published message to Message Broker.")
     except Exception as e:
@@ -118,6 +118,7 @@ if prompt := st.chat_input("输入你的问题"):
         "logs":st.session_state.logs
     }
 
+    
     # 发布消息到中间件
     publish_message(conversation)
 

@@ -17,7 +17,8 @@ class State(TypedDict):
     metadata: Dict[str, Any]
 
 load_dotenv()
-ZHIPU_API_KEY = os.getenv("ZHIPU_API_KEY")
+ZHIPU_API_KEY = os.getenv("SECRET_KEY")
+print(ZHIPU_API_KEY)
 def build_app():
 
     llm = ChatZhipuAI(
@@ -38,7 +39,7 @@ def build_app():
     chain = prompt | llm
 
     def call_model(state: State):
-        print("state", state)
+        # print("state", state)
         response = chain.invoke(state)
         return {
             "chat_history": [
@@ -58,9 +59,10 @@ def build_app():
 
 def generate(app, conversation_id, messages_history, input):
     config = {"configurable": {"thread_id": conversation_id}}
+    # print(config)
     response = app.invoke(
         {"input": input, "chat_history": messages_history},
         config=config
     )
-    print("response", response)
+    # print("response", response)
     return response
