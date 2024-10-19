@@ -6,7 +6,8 @@ from flask_socketio import SocketIO, emit
 import queue
 
 app = Flask(__name__)
-socketio = SocketIO(app, cors_allowed_origins="*")  # 支持 WebSocket 连接
+socketio = SocketIO(app, cors_allowed_origins="*", ping_timeout=60, ping_interval=25)
+
 
 # 使用字典存储每个用户的订阅平台及其消息列表
 user_messages = defaultdict(lambda: defaultdict(deque))  # {user_name: {platform_name: deque([message_list])}}
