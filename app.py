@@ -127,5 +127,5 @@ if prompt := st.chat_input("输入你的问题"):
     publish_message(platform="log", message=conversation)
 
     # 延迟五秒
-    time.sleep(3)
+    time.sleep(2)
     st.rerun()
